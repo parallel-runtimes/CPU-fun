@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <chrono>
 #include <iostream>
@@ -411,7 +412,7 @@ int main(int, char **) {
   uint64_t minTicks = measureClockGranularity();
   res = res*minTicks;
   printf ("Measured granularity = %llu tick%s => %sz, %s\n",
-          minTicks, minTicks != 1 ? "s": "", formatSI(1./res,9,'H').c_str(), formatSI(res,9,'s').c_str());
+          (unsigned long long) minTicks, minTicks != 1 ? "s": "", formatSI(1./res,9,'H').c_str(), formatSI(res,9,'s').c_str());
 
   return 0;
 }
