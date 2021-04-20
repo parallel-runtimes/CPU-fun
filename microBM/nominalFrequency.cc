@@ -36,6 +36,50 @@
 #error "Unknown target architecture"
 #endif
 
+// Return a formatted string after normalising the value into
+// engineering style and using a suitable unit prefix (e.g. ms, us, ns).
+std::string formatSI(double interval, int width, char unit) {
+  std::stringstream os;
+
+  // Preserve accuracy for small numbers, since we only multiply and the
+  // positive powers of ten are precisely representable.
+  static struct {
+    double scale;
+    char prefix;
+  } ranges[] = {{1.e21, 'y'},  {1.e18, 'z'},  {1.e15, 'a'},  {1.e12, 'f'},
+                {1.e9, 'p'},   {1.e6, 'n'},   {1.e3, 'u'},   {1.0, 'm'},
+                {1.e-3, ' '},  {1.e-6, 'k'},  {1.e-9, 'M'},  {1.e-12, 'G'},
+                {1.e-15, 'T'}, {1.e-18, 'P'}, {1.e-21, 'E'}, {1.e-24, 'Z'},
+                {1.e-27, 'Y'}};
+
+  if (interval == 0.0) {
+    os << std::setw(width - 3) << std::right << "0.00" << std::setw(3)
+       << unit;
+    return os.str();
+  }
+
+  bool negative = false;
+  if (interval < 0.0) {
+    negative = true;
+    interval = -interval;
+  }
+
+  for (int i = 0; i < (int)(sizeof(ranges) / sizeof(ranges[0])); i++) {
+    if (interval * ranges[i].scale < 1.e0) {
+      interval = interval * 1000.e0 * ranges[i].scale;
+      os << std::fixed << std::setprecision(2) << std::setw(width - 3)
+         << std::right << (negative ? -interval : interval) << std::setw(2)
+         << ranges[i].prefix << std::setw(1) << unit;
+
+      return os.str();
+    }
+  }
+  os << std::setprecision(2) << std::fixed << std::right << std::setw(width - 3)
+     << interval << std::setw(3) << unit;
+
+  return os.str();
+}
+
 // Setup functions we need for accessing the high resolution clock
 #if (LOMP_TARGET_ARCH_AARCH64)
 #define GENERATE_READ_SYSTEM_REGISTER(ResultType, FuncName, Reg)               \
@@ -120,7 +164,7 @@ static std::string CPUBrandName() {
   // But, what you read here then determnines how you should interpret
   // other leaves.
   x86_cpuid(0x00000000, 0, &cpuinfo);
-  int * bufferAlias = (int *)&buffer[0];
+
   intBuffer[0] = cpuinfo.ebx;
   intBuffer[1] = cpuinfo.edx;
   intBuffer[2] = cpuinfo.ecx;
@@ -205,15 +249,15 @@ static bool extractLeaf15H(double * time) {
   // If it exists, check the results for sanity.
   x86_cpuid(0x15, 0, &cpuinfo);
   if (cpuinfo.ebx == 0 || cpuinfo.ecx == 0) {
-    printf("    cpuid leaf 15H does not give frequency.\n");
+    printf("    cpuid leaf 15H does not give frequency\n");
     return false;
   }
   double coreCrystalFreq = cpuinfo.ecx;
   *time = cpuinfo.eax / (cpuinfo.ebx * coreCrystalFreq);
   printf("   cpuid leaf 15H: coreCrystal = %g, eax=%u, ebx=%u, ecx=%u "
-         "=> %5.2fps\n",
+         "=> %s\n",
          coreCrystalFreq, cpuinfo.eax, cpuinfo.ebx, cpuinfo.ecx,
-         (*time) * 1.e12);
+         formatSI(*time,9,'s').c_str());
   return true;
 }
 
@@ -249,7 +293,6 @@ static bool readHWTickTimeFromName(double * time) {
   }
 
   *time = ((double)1.0) / (freq * multiplier);
-  printf("   read TSC tick time from %s\n", model);
   return true;
 }
 
@@ -326,50 +369,6 @@ static uint64_t measureClockGranularity() {
   return delta;
 }
 
-// Return a formatted string after normalising the value into
-// engineering style and using a suitable unit prefix (e.g. ms, us, ns).
-std::string formatSI(double interval, int width, char unit) {
-  std::stringstream os;
-
-  // Preserve accuracy for small numbers, since we only multiply and the
-  // positive powers of ten are precisely representable.
-  static struct {
-    double scale;
-    char prefix;
-  } ranges[] = {{1.e21, 'y'},  {1.e18, 'z'},  {1.e15, 'a'},  {1.e12, 'f'},
-                {1.e9, 'p'},   {1.e6, 'n'},   {1.e3, 'u'},   {1.0, 'm'},
-                {1.e-3, ' '},  {1.e-6, 'k'},  {1.e-9, 'M'},  {1.e-12, 'G'},
-                {1.e-15, 'T'}, {1.e-18, 'P'}, {1.e-21, 'E'}, {1.e-24, 'Z'},
-                {1.e-27, 'Y'}};
-
-  if (interval == 0.0) {
-    os << std::setw(width - 3) << std::right << "0.00" << std::setw(3)
-       << unit;
-    return os.str();
-  }
-
-  bool negative = false;
-  if (interval < 0.0) {
-    negative = true;
-    interval = -interval;
-  }
-
-  for (int i = 0; i < (int)(sizeof(ranges) / sizeof(ranges[0])); i++) {
-    if (interval * ranges[i].scale < 1.e0) {
-      interval = interval * 1000.e0 * ranges[i].scale;
-      os << std::fixed << std::setprecision(2) << std::setw(width - 3)
-         << std::right << (negative ? -interval : interval) << std::setw(2)
-         << ranges[i].prefix << std::setw(1) << unit;
-
-      return os.str();
-    }
-  }
-  os << std::setprecision(2) << std::fixed << std::right << std::setw(width - 3)
-     << interval << std::setw(3) << unit;
-
-  return os.str();
-}
-
 int main(int, char **) {
 #if (LOMP_TARGET_ARCH_AARCH64)
   double res = readHWTickTime();
@@ -407,12 +406,11 @@ int main(int, char **) {
 #endif
   // Check it...
   double measured = measureTSCtick();
-  printf ("\nSanity check against std::chrono::steady_clock gives frequency %sz => %s\n",
+  printf ("   Sanity check against std::chrono::steady_clock gives frequency %sz => %s\n",
           formatSI(1./measured,9,'H').c_str(), formatSI(measured,9,'s').c_str());
   uint64_t minTicks = measureClockGranularity();
   res = res*minTicks;
   printf ("Measured granularity = %llu tick%s => %sz, %s\n",
           (unsigned long long)minTicks, minTicks != 1 ? "s": "", formatSI(1./res,9,'H').c_str(), formatSI(res,9,'s').c_str());
-
   return 0;
 }
