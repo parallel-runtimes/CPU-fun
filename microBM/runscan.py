@@ -7,14 +7,12 @@ hostName = platform.node().split(".")[0]
 
 
 def capture(cmd):
-    try:
-        print("*** ", cmd)
-        res = subprocess.run(cmd, capture_output=True, shell=True)
-        return (res.stdout.decode("utf-8"), res.stderr.decode("utf-8"))
-    except:
-        print("Command execution  failed")
-        return ("", "")
-
+    print("*** ", cmd)
+    # Require Python 3.7 or later
+    # res = subprocess.run(cmd, shell=True, capture_output=True)
+    # Whereas this works with 3.6..
+    res = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return (res.stdout.decode("utf-8"), res.stderr.decode("utf-8"))
 
 commands = (
     (
@@ -36,7 +34,7 @@ def runOnce(image, arg, threads):
     command = (
         "OMP_NUM_THREADS="
         + str(threads)
-        + " /usr/bin/time "
+        + " /usr/bin/time -p "
         + image
         + " "
         + arg
@@ -82,7 +80,7 @@ def run(testDesc):
             print("Threads, Time, User Time, System Time", file=f)
             for t in res.keys():
                 for times in res[t]:
-                    (real, r, user, u, sys, s) = times.split()
+                    (r, real, u, user, s, sys) = times.split()
                     print(
                         t,
                         ", ",
