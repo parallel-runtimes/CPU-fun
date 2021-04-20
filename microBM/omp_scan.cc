@@ -19,7 +19,7 @@
 #include <regex>
 #include <omp.h>
 
-// Using std::string is unlikley to be the fastest way to handle this,
+// Using std::string is unlikely to be the fastest way to handle this,
 // since it leads to lots of memory allocation/deallocation.
 
 // Better would be to allocate big chunks of memory (or, simply mmap the whole file),
@@ -30,7 +30,7 @@ static bool getLine(std::string &line) {
   return !std::cin.eof();
 }
 
-// See https://en.cppreference.com/w/cpp/regex for detauls of how to
+// See https://en.cppreference.com/w/cpp/regex for details of how to
 // use the std::regex class.
 static bool lineMatches(std::regex const re, std::string & line) {
   return std::regex_search(line, re);
@@ -49,7 +49,10 @@ class fileStats {
   
   void incLines() { lines++; }
   void incMatchedLines() { matchedLines++; }
-
+  void atomicIncMatchedLines() {
+    #pragma omp atomic
+    matchedLines++;
+  }
   fileStats & operator+=(fileStats const & other) {
     lines += other.lines;
     matchedLines += other.matchedLines;
@@ -227,10 +230,7 @@ static fileStats runOmpTasksCritical(std::regex const &matchRE) {
 #pragma omp task default(none),firstprivate(line),shared(matchRE, res)
         {
           if (lineMatches(matchRE, *line)) {
-#pragma omp critical (addStats)
-              {
-                res.incMatchedLines();
-              }
+                res.atomicIncMatchedLines();
            delete line;
           }
         } // task
