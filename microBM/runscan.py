@@ -18,8 +18,8 @@ commands = (
     (
         "./omp_scan",
         {
-            "threads": (1,2,4,8),
-            "args": ("parallel", "parallelRed", "parallelQ", "taskCritical", "taskTR"),
+            "threads": (1,2,4,6,8),
+            "args": ("parallel", "parallelRed", "parallelQ", "task", "taskTR"),
         },
     ),
     ("./omp_scan", {"threads": (1,), "args": ("serial",),}),

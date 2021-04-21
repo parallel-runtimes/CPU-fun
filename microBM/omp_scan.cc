@@ -177,14 +177,18 @@ template<typename T> class lockedDeque {
 // Other threads try to pull lines from the queue.
 // This will still work with only one thread, but in that case it buffers
 // the whole file, which may be sub-optimal!
+#include <atomic>
+
 static fileStats runParallelQueue(std::regex const &matchRE) {
   fileStats res;
   lockedDeque<std::string *> lineQueue;
-  bool done = false;
+  // I find this easier to grok than the OpenMP flush directives!
+  std::atomic<bool> done(false);
 
   // Use the same reduction operations as before.
 #pragma omp declare reduction (+: fileStats : omp_out += omp_in)
-#pragma omp parallel shared(matchRE, lineQueue, done), reduction(+:res)
+#pragma omp parallel shared(matchRE, lineQueue, done), \
+                     reduction(+:res)
   {
 #pragma omp single nowait
     {
@@ -195,7 +199,6 @@ static fileStats runParallelQueue(std::regex const &matchRE) {
         line = new std::string;
       }
       done = true;
-#pragma omp flush
       delete line;
     } // single
     // Consume lines.
@@ -216,7 +219,7 @@ static fileStats runParallelQueue(std::regex const &matchRE) {
 }
 
 // Tasks using critical on each line to update global state.
-static fileStats runOmpTasksCritical(std::regex const &matchRE) {
+static fileStats runOmpTasks(std::regex const &matchRE) {
   fileStats res;
   
 #pragma omp parallel
@@ -227,7 +230,8 @@ static fileStats runOmpTasksCritical(std::regex const &matchRE) {
       while (getLine(*line)) {
         res.incLines();
         
-#pragma omp task default(none),firstprivate(line),shared(matchRE, res)
+#pragma omp task default(none),firstprivate(line),\
+                 shared(matchRE, res)
         {
           if (lineMatches(matchRE, *line)) {
                 res.atomicIncMatchedLines();
@@ -328,7 +332,7 @@ static struct implementation_t {
   {"parallel", runParallel},
   {"parallelRed", runParallelRed},
   {"parallelQ", runParallelQueue},
-  {"taskCritical", runOmpTasksCritical},
+  {"task", runOmpTasks},
   {"taskTR", runOmpTasksTR},
 #if (USE_TASKREDUCTION)
   {"taskRed", runOmpTasksRed},

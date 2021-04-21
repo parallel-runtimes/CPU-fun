@@ -4,7 +4,7 @@ CXX=clang++
 
 omp_scan:
 
-run: runscan.py large.txt
+run: omp_scan runscan.py large.txt 
 	python3	runscan.py
 
 large.txt: Makefile
