@@ -227,7 +227,8 @@ static fileStats runOmpTasksCritical(std::regex const &matchRE) {
       while (getLine(*line)) {
         res.incLines();
         
-#pragma omp task default(none),firstprivate(line),shared(matchRE, res)
+#pragma omp task default(none),firstprivate(line),\
+  shared(matchRE, res)
         {
           if (lineMatches(matchRE, *line)) {
                 res.atomicIncMatchedLines();
