@@ -410,8 +410,7 @@ int main(int, char **) {
           formatSI(1./measured,9,'H').c_str(), formatSI(measured,9,'s').c_str());
   uint64_t minTicks = measureClockGranularity();
   res = res*minTicks;
-  printf ("   Measured granularity = %llu tick%s => %sz, %s\n",
-          (unsigned long long) minTicks, minTicks != 1 ? "s": "", formatSI(1./res,9,'H').c_str(), formatSI(res,9,'s').c_str());
-
+  printf ("Measured granularity = %llu tick%s => %sz, %s\n",
+          (unsigned long long)minTicks, minTicks != 1 ? "s": "", formatSI(1./res,9,'H').c_str(), formatSI(res,9,'s').c_str());
   return 0;
 }

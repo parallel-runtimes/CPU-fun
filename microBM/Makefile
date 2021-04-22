@@ -1,13 +1,14 @@
 
 CXX=g++-10
+CXX=clang++
 
 omp_scan:
 
-runScan: runscan.py large.txt
-	runscan.py
+run: omp_scan runscan.py large.txt 
+	python3	runscan.py
 
-large.txt:
-	python3 generateText.py 100 100000 > large.txt
+large.txt: Makefile
+	python3 generateText.py 50 500000 > large.txt
 
 %: %.cc Makefile
 	$(CXX) -fopenmp -O3 -o $@ $<

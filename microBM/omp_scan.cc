@@ -141,31 +141,31 @@ static fileStats runParallelRed(std::regex const &matchRE) {
 // Something closer to the "I want two separate teams, with one
 // thread reading, and others processing lines from a queue."
 //
-#include <deque>
+#include <queue>
 
-template<typename T> class lockedDeque {
-  std::deque<T> theDeque;
+template<typename T> class lockedQueue {
+  std::queue<T> theQueue;
   bool empty() const {
     bool res;
 #pragma omp critical (queue)
-    res = theDeque.empty();
+    res = theQueue.empty();
     return res;
   }
   
  public:
-  void push_front(T value) {
+  void push(T value) {
 #pragma omp critical (queue)
-    theDeque.push_front(value);
+    theQueue.push(value);
   }
-  T pull_back() {
+  T pull() {
     T res;
 #pragma omp critical (queue)
     {
-      if (theDeque.empty()) {
+      if (theQueue.empty()) {
         res = 0;
       } else {
-        res = theDeque.back();
-        theDeque.pop_back();
+        res = theQueue.front();
+        theQueue.pop();
       }
     }
     return res;
@@ -177,30 +177,33 @@ template<typename T> class lockedDeque {
 // Other threads try to pull lines from the queue.
 // This will still work with only one thread, but in that case it buffers
 // the whole file, which may be sub-optimal!
+#include <atomic>
+
 static fileStats runParallelQueue(std::regex const &matchRE) {
   fileStats res;
-  lockedDeque<std::string *> lineQueue;
-  bool done = false;
+  lockedQueue<std::string *> lineQueue;
+  // I find this easier to grok than the OpenMP flush directives!
+  std::atomic<bool> done(false);
 
   // Use the same reduction operations as before.
 #pragma omp declare reduction (+: fileStats : omp_out += omp_in)
-#pragma omp parallel shared(matchRE, lineQueue, done), reduction(+:res)
+#pragma omp parallel shared(matchRE, lineQueue, done), \
+                     reduction(+:res)
   {
 #pragma omp single nowait
     {
       // Read input and produce lines.
       std::string * line = new std::string;
       while (getLine(*line)) {
-        lineQueue.push_front(line);
+        lineQueue.push(line);
         line = new std::string;
       }
       done = true;
-#pragma omp flush
       delete line;
     } // single
     // Consume lines.
     for (;;) {
-      std::string * line = lineQueue.pull_back();
+      std::string * line = lineQueue.pull();
       if (line) {
         res.incLines();
         if (lineMatches(matchRE, *line)) {
@@ -216,7 +219,7 @@ static fileStats runParallelQueue(std::regex const &matchRE) {
 }
 
 // Tasks using critical on each line to update global state.
-static fileStats runOmpTasksCritical(std::regex const &matchRE) {
+static fileStats runOmpTasks(std::regex const &matchRE) {
   fileStats res;
   
 #pragma omp parallel
@@ -228,7 +231,7 @@ static fileStats runOmpTasksCritical(std::regex const &matchRE) {
         res.incLines();
         
 #pragma omp task default(none),firstprivate(line),\
-  shared(matchRE, res)
+                 shared(matchRE, res)
         {
           if (lineMatches(matchRE, *line)) {
                 res.atomicIncMatchedLines();
@@ -329,7 +332,7 @@ static struct implementation_t {
   {"parallel", runParallel},
   {"parallelRed", runParallelRed},
   {"parallelQ", runParallelQueue},
-  {"taskCritical", runOmpTasksCritical},
+  {"task", runOmpTasks},
   {"taskTR", runOmpTasksTR},
 #if (USE_TASKREDUCTION)
   {"taskRed", runOmpTasksRed},
